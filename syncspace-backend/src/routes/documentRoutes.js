@@ -1,0 +1,22 @@
+// routes/documentRoutes.js
+const express = require("express");
+const router = express.Router();
+const documentController = require("../controllers/documentController");
+const { protect } = require("../middleware/authMiddleware");
+
+router.use(protect);
+
+router.route("/")
+  .get(documentController.getDocuments)
+  .post(documentController.createDocument);
+
+router.route("/:docId")
+  .get(documentController.getDocument)
+  .patch(documentController.updateDocument)
+  .delete(documentController.deleteDocument);
+
+router.post("/:docId/snapshot",  documentController.saveSnapshot);
+router.get("/:docId/versions",   documentController.getVersions);
+router.post("/:docId/versions/:versionId/restore", documentController.restoreVersion);
+
+module.exports = router;
