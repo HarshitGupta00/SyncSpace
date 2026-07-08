@@ -9,34 +9,38 @@
 //   Express app → http.Server → Socket.io wraps it
 //
 // app.js stays pure Express. server.js assembles the full server.
+//
+// WEBSOCKET UPGRADE PATHS:
+//   This server handles TWO WebSocket upgrade paths on the same HTTP server:
+//   1. Socket.io (on /socket.io/) — presence, notifications, lightweight events
+//   2. Yjs (on /yjs) — CRDT document/whiteboard sync via y-protocols
+//   They don't conflict because each checks the request path before upgrading.
 
 require("dotenv").config();
 
 const http = require("http");
-const { Server } = require("socket.io");
 
 const app = require("./app");
 const connectDB = require("./config/db");
-const { PORT, CLIENT_URL } = require("./config/env");
+const { PORT } = require("./config/env");
+const { createSocketServer } = require("./config/socket");
 const registerSocketHandlers = require("./sockets/index");
+const { initYjsWebSocket } = require("./sockets/yjsHandler");
 
 // Create the raw HTTP server from our Express app
 const httpServer = http.createServer(app);
 
-// Attach Socket.io to the HTTP server
-// CORS here mirrors what Express has — Socket.io handles its own CORS
-// separately from Express CORS middleware.
-const io = new Server(httpServer, {
-  cors: {
-    origin: CLIENT_URL,
-    methods: ["GET", "POST"],
-    credentials: true,
-  },
-});
+// Attach Socket.io to the HTTP server (config extracted to config/socket.js)
+const io = createSocketServer(httpServer);
 
 // Register all socket event handlers
 // We pass `io` in so handlers can emit to rooms/namespaces
 registerSocketHandlers(io);
+
+// Initialize Yjs WebSocket server on /yjs path
+// This handles real-time CRDT sync for documents and whiteboards.
+// Runs on the SAME HTTP server as Socket.io but on a different upgrade path.
+initYjsWebSocket(httpServer);
 
 // Make `io` accessible in controllers via req.app.get("io")
 // WHY: controllers like commentController need to emit real-time notifications
@@ -53,6 +57,7 @@ const startServer = async () => {
   httpServer.listen(PORT, () => {
     console.log(`SyncSpace server running on port ${PORT} [${process.env.NODE_ENV}]`);
     console.log(`Health check: http://localhost:${PORT}/health`);
+    console.log(`Yjs WebSocket: ws://localhost:${PORT}/yjs`);
   });
 };
 

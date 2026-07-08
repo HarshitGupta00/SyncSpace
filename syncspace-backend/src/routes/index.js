@@ -18,6 +18,7 @@ const inviteRoutes       = require("./inviteRoutes");
 const commentRoutes      = require("./commentRoutes");
 const notificationRoutes = require("./notificationRoutes");
 const aiRoutes           = require("./aiRoutes");
+const userRoutes         = require("./userRoutes");
 
 router.use("/auth",          authRoutes);
 router.use("/teams",         teamRoutes);
@@ -28,5 +29,6 @@ router.use("/invites",       inviteRoutes);
 router.use("/comments",      commentRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/ai",            aiRoutes);
+router.use("/users",         userRoutes);
 
 module.exports = router;

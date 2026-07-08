@@ -55,6 +55,28 @@ const projectSchema = new mongoose.Schema(
       // `owner` is just "who created this project" — actual access is via
       // the team's membership, not this field.
     },
+
+    // --- Project-level permission overrides ---
+    // Per-project role overrides for specific team members.
+    // Empty by default: no override = inherit from team role using this mapping:
+    //   team owner/admin → editor (can edit content/metadata)
+    //   team member      → editor (default — team members can edit by default)
+    // An entry here OVERRIDES that default for a specific user, e.g. to
+    // restrict a team member to "viewer" on a sensitive project.
+    // This is the second permission layer described in the project overview
+    // (Module 0: "Two-level permissions").
+    memberOverrides: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        role: {
+          type: String,
+          enum: ["viewer", "commenter", "editor"],
+        },
+      },
+    ],
   },
   {
     timestamps: true,

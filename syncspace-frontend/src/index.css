@@ -1,0 +1,266 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Google Fonts — Inter ─────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+/* ─── CSS Custom Properties (Design Tokens) ─────────────────── */
+/* These mirror the Tailwind config — used for dynamic values
+   that Tailwind can't handle (e.g. Framer Motion inline styles,
+   live cursor colors, canvas backgrounds) */
+:root {
+  /* Surfaces */
+  --bg-app:      #FAFAFA;
+  --bg-surface:  #FFFFFF;
+  --border:      #E5E5E5;
+
+  /* Text */
+  --text-primary:   #0A0A0A;
+  --text-secondary: #6B6B6B;
+  --text-tertiary:  #9CA3AF;
+
+  /* Accent */
+  --accent:        #0A0A0A;
+  --accent-hover:  #1A1A1A;
+  --accent-purple: #7C5CFC;
+
+  /* Status */
+  --green:  #16A34A;
+  --amber:  #F59E0B;
+  --blue:   #3B82F6;
+  --red:    #DC2626;
+
+  /* Layout */
+  --sidebar-width: 220px;
+  --topbar-height: 64px;
+
+  /* Shadows */
+  --shadow-sm:    0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --shadow-md:    0 2px 8px 0 rgb(0 0 0 / 0.06);
+  --shadow-lg:    0 4px 16px 0 rgb(0 0 0 / 0.08);
+  --shadow-modal: 0 20px 60px 0 rgb(0 0 0 / 0.15);
+
+  /* Transitions */
+  --transition-fast:   100ms ease;
+  --transition-normal: 150ms ease;
+  --transition-slow:   200ms ease;
+}
+
+/* ─── Dark Mode Tokens ───────────────────────────────────────── */
+/* Applied when <html class="dark"> is set */
+.dark {
+  --bg-app:      #0F0F0F;
+  --bg-surface:  #1A1A1A;
+  --border:      #2A2A2A;
+
+  --text-primary:   #F5F5F5;
+  --text-secondary: #A0A0A0;
+  --text-tertiary:  #666666;
+
+  --accent:       #F5F5F5;
+  --accent-hover: #E0E0E0;
+
+  --shadow-sm:    0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-md:    0 2px 8px 0 rgb(0 0 0 / 0.4);
+  --shadow-lg:    0 4px 16px 0 rgb(0 0 0 / 0.5);
+  --shadow-modal: 0 20px 60px 0 rgb(0 0 0 / 0.6);
+}
+
+/* ─── Base Resets ────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 14px; /* base — matches reference screenshots compact scale */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+/* ─── Scrollbar Styling ──────────────────────────────────────── */
+/* Thin, minimal scrollbars matching the clean design */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+
+/* ─── Selection Highlight ────────────────────────────────────── */
+::selection {
+  background: rgb(124 92 252 / 0.2); /* accent-purple tint */
+  color: var(--text-primary);
+}
+
+/* ─── Focus Ring — Accessible but clean ─────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent-purple);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Remove default focus for mouse users */
+:focus:not(:focus-visible) { outline: none; }
+
+/* ─── Reusable Utility Classes ───────────────────────────────── */
+@layer components {
+
+  /* Primary button — black background, white text */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-white
+           text-sm font-semibold rounded-lg
+           transition-all duration-150 ease-out
+           hover:bg-accent-hover active:scale-[0.98]
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Secondary button — white background, border */
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 bg-surface text-primary
+           text-sm font-semibold rounded-lg border border-border
+           transition-all duration-150 ease-out
+           hover:bg-app active:scale-[0.98]
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Ghost button — no background, just text */
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-3 py-2 text-secondary
+           text-sm font-medium rounded-lg
+           transition-all duration-150 ease-out
+           hover:bg-app hover:text-primary active:scale-[0.98];
+  }
+
+  /* Danger button — red */
+  .btn-danger {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 bg-status-red text-white
+           text-sm font-semibold rounded-lg
+           transition-all duration-150 ease-out
+           hover:opacity-90 active:scale-[0.98];
+  }
+
+  /* Standard input field */
+  .input {
+    @apply w-full px-3 py-2.5 bg-surface border border-border rounded-lg
+           text-sm text-primary placeholder:text-tertiary
+           transition-all duration-150
+           focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10;
+  }
+
+  /* Card — white surface with border */
+  .card {
+    @apply bg-surface border border-border rounded-xl p-5
+           shadow-sm transition-shadow duration-150
+           hover:shadow-md;
+  }
+
+  /* Status/role pill badge */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full
+           text-xs font-medium;
+  }
+  .badge-blue   { @apply bg-blue-50   text-blue-700;  }
+  .badge-green  { @apply bg-green-50  text-green-700; }
+  .badge-amber  { @apply bg-amber-50  text-amber-700; }
+  .badge-red    { @apply bg-red-50    text-red-700;   }
+  .badge-gray   { @apply bg-gray-100  text-gray-600;  }
+  .badge-black  { @apply bg-primary   text-white;     }
+
+  /* Sidebar nav item */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg
+           text-sm font-medium text-secondary
+           transition-all duration-150
+           hover:bg-app hover:text-primary cursor-pointer;
+  }
+  .nav-item-active {
+    @apply bg-app text-primary font-semibold;
+  }
+
+  /* Skeleton loader shimmer */
+  .skeleton {
+    @apply bg-gradient-to-r from-border via-app to-border
+           bg-[length:200%_100%] animate-shimmer rounded-md;
+  }
+
+  /* Section heading inside a page */
+  .page-title {
+    @apply text-4xl font-bold text-primary tracking-tight;
+  }
+  .page-subtitle {
+    @apply text-sm text-secondary mt-1;
+  }
+
+  /* Divider */
+  .divider {
+    @apply border-t border-border;
+  }
+}
+
+/* ─── TipTap Editor Styles ───────────────────────────────────── */
+/* The editor renders inside a .tiptap div — style its content here */
+.tiptap {
+  @apply outline-none min-h-[calc(100vh-200px)] text-primary;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.tiptap p { @apply mb-3; }
+.tiptap h1 { @apply text-4xl font-bold mb-4 mt-6 text-primary; }
+.tiptap h2 { @apply text-2xl font-semibold mb-3 mt-5 text-primary; }
+.tiptap h3 { @apply text-xl font-semibold mb-2 mt-4 text-primary; }
+.tiptap ul { @apply list-disc list-inside mb-3 space-y-1; }
+.tiptap ol { @apply list-decimal list-inside mb-3 space-y-1; }
+.tiptap li { @apply text-primary; }
+.tiptap blockquote {
+  @apply border-l-4 border-border pl-4 italic text-secondary my-4;
+}
+.tiptap code {
+  @apply bg-app px-1.5 py-0.5 rounded text-sm font-mono text-primary;
+}
+.tiptap pre {
+  @apply bg-app p-4 rounded-lg my-4 overflow-x-auto;
+}
+.tiptap pre code { @apply bg-transparent p-0; }
+.tiptap strong { @apply font-semibold; }
+.tiptap em { @apply italic; }
+.tiptap u { @apply underline; }
+.tiptap s { @apply line-through text-secondary; }
+.tiptap mark { @apply bg-amber-100 rounded-sm px-0.5; }
+.tiptap hr { @apply border-border my-6; }
+.tiptap a { @apply text-accent-purple underline hover:opacity-80; }
+
+/* TipTap placeholder */
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  @apply text-tertiary pointer-events-none float-left h-0;
+}
+
+/* ─── Live Cursor Labels ─────────────────────────────────────── */
+/* Yjs cursor colors are injected dynamically — base styles here */
+.collaboration-cursor__caret {
+  border-left: 2px solid;
+  margin-left: -1px;
+  margin-right: -1px;
+  pointer-events: none;
+  word-break: normal;
+}
+.collaboration-cursor__label {
+  @apply text-2xs font-semibold text-white px-1.5 py-0.5 rounded
+         select-none pointer-events-none whitespace-nowrap;
+  font-size: 11px;
+  top: -1.4em;
+  position: relative;
+  user-select: none;
+}

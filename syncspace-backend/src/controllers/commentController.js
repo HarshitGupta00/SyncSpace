@@ -1,28 +1,46 @@
 // controllers/commentController.js
+//
+// TASK 3 FIX: Previously getComments and addComment did NOT check that the
+// requester has access to the target document/whiteboard. Now all comment
+// operations resolve target → project access via permissionService.
 
 const Comment = require("../models/Comment");
 const Notification = require("../models/Notification");
-const Document = require("../models/Document");
-const Whiteboard = require("../models/Whiteboard");
 const asyncHandler = require("../utils/asyncHandler");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 const { emitNotification } = require("../sockets/notificationHandler");
+const {
+  ROLE_WEIGHT,
+  resolveDocumentAccess,
+  resolveWhiteboardAccess,
+} = require("../services/permissionService");
 
-// Helper: get the target document/whiteboard and verify it exists
-const getTarget = async (targetType, targetId) => {
-  const Model = targetType === "Document" ? Document : Whiteboard;
-  return Model.findById(targetId).lean();
+/**
+ * Helper: resolve access for a comment target (Document or Whiteboard).
+ * Returns { effectiveRole } or { error, status }.
+ */
+const resolveTargetAccess = async (userId, targetId, targetType) => {
+  if (targetType === "Document") {
+    return resolveDocumentAccess(userId, targetId);
+  } else if (targetType === "Whiteboard") {
+    return resolveWhiteboardAccess(userId, targetId);
+  }
+  return { error: "Invalid targetType", status: 400 };
 };
 
 // @desc    Add a comment to a document or whiteboard
 // @route   POST /api/comments
-// @access  Protected
+// @access  Protected (commenter or above)
 exports.addComment = asyncHandler(async (req, res) => {
   const { targetId, targetType, content, anchor, mentions } = req.body;
 
-  // Verify target exists
-  const target = await getTarget(targetType, targetId);
-  if (!target) return sendError(res, `${targetType} not found`, 404);
+  // Access check — must have at least commenter access to the target's project
+  const result = await resolveTargetAccess(req.user._id, targetId, targetType);
+  if (result.error) return sendError(res, result.error, result.status);
+
+  if (ROLE_WEIGHT[result.effectiveRole] < ROLE_WEIGHT.commenter) {
+    return sendError(res, "You need commenter access to add comments", 403);
+  }
 
   const comment = await Comment.create({
     target: targetId,
@@ -62,12 +80,16 @@ exports.addComment = asyncHandler(async (req, res) => {
 
 // @desc    Get all comments for a document or whiteboard
 // @route   GET /api/comments?targetId=xxx&targetType=Document
-// @access  Protected
+// @access  Protected (viewer or above)
 exports.getComments = asyncHandler(async (req, res) => {
   const { targetId, targetType } = req.query;
   if (!targetId || !targetType) {
     return sendError(res, "targetId and targetType are required", 400);
   }
+
+  // Access check — must have at least viewer access
+  const result = await resolveTargetAccess(req.user._id, targetId, targetType);
+  if (result.error) return sendError(res, result.error, result.status);
 
   const comments = await Comment.find({ target: targetId, targetType })
     .populate("author", "name avatar")
@@ -113,15 +135,24 @@ exports.deleteComment = asyncHandler(async (req, res) => {
 
 // @desc    Resolve / unresolve a comment
 // @route   PATCH /api/comments/:commentId/resolve
-// @access  Protected
+// @access  Protected (commenter or above on the target's project)
 exports.resolveComment = asyncHandler(async (req, res) => {
-  const comment = await Comment.findByIdAndUpdate(
+  const comment = await Comment.findById(req.params.commentId);
+  if (!comment) return sendError(res, "Comment not found", 404);
+
+  // Access check — resolving requires at least commenter access
+  const result = await resolveTargetAccess(req.user._id, comment.target, comment.targetType);
+  if (result.error) return sendError(res, result.error, result.status);
+
+  if (ROLE_WEIGHT[result.effectiveRole] < ROLE_WEIGHT.commenter) {
+    return sendError(res, "You need commenter access to resolve comments", 403);
+  }
+
+  const updated = await Comment.findByIdAndUpdate(
     req.params.commentId,
     { resolved: req.body.resolved },
     { new: true }
   ).populate("author", "name avatar");
 
-  if (!comment) return sendError(res, "Comment not found", 404);
-
-  return sendSuccess(res, { comment }, `Comment ${req.body.resolved ? "resolved" : "reopened"}`);
+  return sendSuccess(res, { comment: updated }, `Comment ${req.body.resolved ? "resolved" : "reopened"}`);
 });

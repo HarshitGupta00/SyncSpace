@@ -12,10 +12,10 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
-const rateLimit = require("express-rate-limit");
 
 const { CLIENT_URL, NODE_ENV } = require("./config/env");
 const errorMiddleware = require("./middleware/errorMiddleware");
+const { globalLimiter, authLimiter } = require("./middleware/rateLimiter");
 const routes = require("./routes/index");
 
 const app = express();
@@ -37,15 +37,12 @@ app.use(
   })
 );
 
-// Rate limiting — prevent abuse/brute force.
-// This config: max 100 requests per 15 minutes per IP.
-// In production you'd have stricter limits on auth routes specifically.
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
-  message: { success: false, message: "Too many requests, please try again later." },
-});
-app.use("/api", limiter);
+// Rate limiting — extracted into middleware/rateLimiter.js.
+// Global limiter: 100 requests per 15 minutes per IP across all /api routes.
+// Auth limiter: 10 requests per 15 minutes per IP specifically on /api/auth
+// (stricter because auth endpoints are the primary brute-force target).
+app.use("/api/auth", authLimiter);
+app.use("/api", globalLimiter);
 
 // --- Request Parsing ---
 app.use(express.json({ limit: "10mb" })); // parse JSON bodies, with size limit to prevent huge payload attacks
@@ -67,6 +64,10 @@ app.get("/health", (req, res) => {
 
 // --- API Routes ---
 // All routes are mounted under /api — so /api/auth, /api/teams, etc.
+// NOTE: /api/users is intentionally a separate router from /api/auth.
+// /api/auth handles authentication (signup, login, session).
+// /api/users handles user-facing profile lookups (e.g. viewing another
+// team member's public profile in the member list).
 app.use("/api", routes);
 
 // --- 404 Handler ---

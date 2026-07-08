@@ -1,30 +1,32 @@
 // controllers/whiteboardController.js
 // Mirrors documentController structure — same access control pattern,
 // same Yjs snapshot persistence, but for whiteboards.
+//
+// Now uses the shared permissionService instead of a duplicated
+// getProjectWithAccess helper — same refactor as documentController.
 
 const Whiteboard = require("../models/Whiteboard");
-const Project = require("../models/Project");
-const TeamMember = require("../models/TeamMember");
+const Comment = require("../models/Comment");
 const asyncHandler = require("../utils/asyncHandler");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
+const {
+  ROLE_WEIGHT,
+  resolveProjectAccess,
+  resolveWhiteboardAccess,
+} = require("../services/permissionService");
 
-const getProjectWithAccess = async (projectId, userId) => {
-  const project = await Project.findById(projectId).lean();
-  if (!project) return { error: "Project not found", status: 404 };
-  if (project.team) {
-    const membership = await TeamMember.findOne({ user: userId, team: project.team });
-    if (!membership) return { error: "Access denied", status: 403 };
-    return { project, role: membership.role };
-  } else {
-    if (project.owner.toString() !== userId.toString()) return { error: "Access denied", status: 403 };
-    return { project, role: "owner" };
-  }
-};
-
+// @desc    Create a whiteboard inside a project
+// @route   POST /api/whiteboards
+// @access  Protected (editor or above)
 exports.createWhiteboard = asyncHandler(async (req, res) => {
   const { title, projectId } = req.body;
-  const { error, status } = await getProjectWithAccess(projectId, req.user._id);
-  if (error) return sendError(res, error, status);
+
+  const result = await resolveProjectAccess(req.user._id, projectId);
+  if (result.error) return sendError(res, result.error, result.status);
+
+  if (ROLE_WEIGHT[result.effectiveRole] < ROLE_WEIGHT.editor) {
+    return sendError(res, "You need editor access to create whiteboards", 403);
+  }
 
   const whiteboard = await Whiteboard.create({
     title: title || "Untitled Whiteboard",
@@ -35,12 +37,15 @@ exports.createWhiteboard = asyncHandler(async (req, res) => {
   return sendSuccess(res, { whiteboard }, "Whiteboard created", 201);
 });
 
+// @desc    Get all whiteboards in a project
+// @route   GET /api/whiteboards?projectId=xxx
+// @access  Protected (viewer or above)
 exports.getWhiteboards = asyncHandler(async (req, res) => {
   const { projectId } = req.query;
   if (!projectId) return sendError(res, "projectId is required", 400);
 
-  const { error, status } = await getProjectWithAccess(projectId, req.user._id);
-  if (error) return sendError(res, error, status);
+  const result = await resolveProjectAccess(req.user._id, projectId);
+  if (result.error) return sendError(res, result.error, result.status);
 
   const whiteboards = await Whiteboard.find({ project: projectId })
     .populate("owner", "name avatar")
@@ -51,26 +56,31 @@ exports.getWhiteboards = asyncHandler(async (req, res) => {
   return sendSuccess(res, { whiteboards });
 });
 
+// @desc    Get a single whiteboard (metadata only)
+// @route   GET /api/whiteboards/:wbId
+// @access  Protected (viewer or above)
 exports.getWhiteboard = asyncHandler(async (req, res) => {
+  const result = await resolveWhiteboardAccess(req.user._id, req.params.wbId);
+  if (result.error) return sendError(res, result.error, result.status);
+
   const whiteboard = await Whiteboard.findById(req.params.wbId)
     .populate("owner", "name avatar")
     .select("-yjsState")
     .lean();
 
-  if (!whiteboard) return sendError(res, "Whiteboard not found", 404);
-
-  const { error, status } = await getProjectWithAccess(whiteboard.project, req.user._id);
-  if (error) return sendError(res, error, status);
-
-  return sendSuccess(res, { whiteboard });
+  return sendSuccess(res, { whiteboard, effectiveRole: result.effectiveRole });
 });
 
+// @desc    Update whiteboard metadata (title, description, background, settings)
+// @route   PATCH /api/whiteboards/:wbId
+// @access  Protected (editor or above)
 exports.updateWhiteboard = asyncHandler(async (req, res) => {
-  const whiteboard = await Whiteboard.findById(req.params.wbId);
-  if (!whiteboard) return sendError(res, "Whiteboard not found", 404);
+  const result = await resolveWhiteboardAccess(req.user._id, req.params.wbId);
+  if (result.error) return sendError(res, result.error, result.status);
 
-  const { error, status } = await getProjectWithAccess(whiteboard.project, req.user._id);
-  if (error) return sendError(res, error, status);
+  if (ROLE_WEIGHT[result.effectiveRole] < ROLE_WEIGHT.editor) {
+    return sendError(res, "You need editor access to update this whiteboard", 403);
+  }
 
   const allowed = ["title", "description", "background", "settings"];
   const updates = { lastEditedBy: req.user._id };
@@ -83,6 +93,11 @@ exports.updateWhiteboard = asyncHandler(async (req, res) => {
   return sendSuccess(res, { whiteboard: updated }, "Whiteboard updated");
 });
 
+// @desc    Delete a whiteboard
+// @route   DELETE /api/whiteboards/:wbId
+// @access  Protected (owner only)
+//
+// CASCADING DELETE: Also removes all comments on this whiteboard.
 exports.deleteWhiteboard = asyncHandler(async (req, res) => {
   const whiteboard = await Whiteboard.findById(req.params.wbId);
   if (!whiteboard) return sendError(res, "Whiteboard not found", 404);
@@ -91,18 +106,31 @@ exports.deleteWhiteboard = asyncHandler(async (req, res) => {
     return sendError(res, "Only the whiteboard owner can delete it", 403);
   }
 
+  // Delete all comments on this whiteboard
+  await Comment.deleteMany({ target: req.params.wbId, targetType: "Whiteboard" });
+
   await Whiteboard.findByIdAndDelete(req.params.wbId);
   return sendSuccess(res, {}, "Whiteboard deleted");
 });
 
+// @desc    Save a Yjs snapshot for a whiteboard
+// @route   POST /api/whiteboards/:wbId/snapshot
+// @access  Protected (editor or above)
+//
+// TASK 3 FIX: Previously had no access check on snapshot save.
 exports.saveSnapshot = asyncHandler(async (req, res) => {
   const { yjsState } = req.body;
-  const buffer = Buffer.from(yjsState, "base64");
 
-  await Whiteboard.findByIdAndUpdate(req.params.wbId, {
-    yjsState: buffer,
-    lastEditedBy: req.user._id,
-  });
+  const result = await resolveWhiteboardAccess(req.user._id, req.params.wbId);
+  if (result.error) return sendError(res, result.error, result.status);
+
+  if (ROLE_WEIGHT[result.effectiveRole] < ROLE_WEIGHT.editor) {
+    return sendError(res, "You need editor access to save snapshots", 403);
+  }
+
+  const buffer = Buffer.from(yjsState, "base64");
+  const { saveWhiteboardSnapshot } = require("../services/snapshotService");
+  await saveWhiteboardSnapshot(req.params.wbId, buffer, req.user._id);
 
   return sendSuccess(res, {}, "Snapshot saved");
 });

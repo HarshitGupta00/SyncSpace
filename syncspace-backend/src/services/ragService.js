@@ -4,7 +4,7 @@
 // FLOW:
 //   indexDocument(docId, text)
 //     → chunk text
-//     → embed each chunk via OpenAI
+//     → embed each chunk via Gemini
 //     → upsert vectors into Pinecone (namespaced by docId)
 //
 //   retrieveRelevantChunks(docId, question, topK)
@@ -13,25 +13,27 @@
 //     → return the matching text chunks
 
 const { Pinecone } = require("@pinecone-database/pinecone");
-const OpenAI = require("openai/index.mjs");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const chunkText = require("../utils/chunkText");
-const { PINECONE_API_KEY, PINECONE_INDEX_NAME, OPENAI_API_KEY } = require("../config/env");
+const { PINECONE_API_KEY, PINECONE_INDEX_NAME, GEMINI_API_KEY } = require("../config/env");
 
 const pinecone = new Pinecone({ apiKey: PINECONE_API_KEY });
-const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 // Get the Pinecone index — done once, reused across requests
 const getIndex = () => pinecone.index(PINECONE_INDEX_NAME);
 
-// Generate an embedding vector for a piece of text using OpenAI's embedding model.
-// An embedding is a fixed-length array of floats (1536 numbers for text-embedding-3-small)
+// Generate an embedding vector for a piece of text using Gemini's embedding model.
+// An embedding is a fixed-length array of floats (768 numbers for text-embedding-004)
 // that represents the semantic meaning of the text. Similar meanings → similar vectors.
+//
+// NOTE: Gemini's text-embedding-004 outputs 768-dimension vectors by default,
+// compared to OpenAI's 1536. If you already have a Pinecone index created with
+// 1536 dimensions, you'll need to recreate it with 768 dimensions.
 const embedText = async (text) => {
-  const response = await openai.embeddings.create({
-    model: "text-embedding-3-small", // cheapest + fastest OpenAI embedding model, good quality
-    input: text,
-  });
-  return response.data[0].embedding; // returns the float array
+  const model = genAI.getGenerativeModel({ model: "text-embedding-004" });
+  const result = await model.embedContent(text);
+  return result.embedding.values; // returns the float array
 };
 
 // Index (or re-index) an entire document into Pinecone.

@@ -36,7 +36,11 @@ module.exports = {
   CLIENT_URL: process.env.CLIENT_URL,
 
   RESEND_API_KEY: process.env.RESEND_API_KEY || "",
-  OPENAI_API_KEY: process.env.OPENAI_API_KEY || "",
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
   PINECONE_API_KEY: process.env.PINECONE_API_KEY || "",
   PINECONE_INDEX_NAME: process.env.PINECONE_INDEX_NAME || "syncspace-docs",
+
+  // Yjs real-time sync — how long to wait (ms) after the last edit before
+  // persisting the CRDT state to MongoDB. Lower = more writes, less data loss.
+  YJS_PERSISTENCE_INTERVAL_MS: parseInt(process.env.YJS_PERSISTENCE_INTERVAL_MS, 10) || 3000,
 };
